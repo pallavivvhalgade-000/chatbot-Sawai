@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
+from app.rag.retrieval import retrieve_documents_with_scores
 
 from app.core.config import settings
 from app.domain.enums import ConversationMode, ServiceType
@@ -62,4 +63,28 @@ async def test_state(request: StateDemoRequest):
             else None
         ),
         "state": state.model_dump(mode="json"),
+    }
+
+class RAGTestRequest(BaseModel):
+    query: str
+    k: int = 4
+
+
+@app.post("/test/rag")
+async def test_rag(request: RAGTestRequest):
+    results = retrieve_documents_with_scores(
+        query=request.query,
+        k=request.k,
+    )
+
+    return {
+        "query": request.query,
+        "results": [
+            {
+                "content": document.page_content,
+                "score": score,
+                "metadata": document.metadata,
+            }
+            for document, score in results
+        ],
     }

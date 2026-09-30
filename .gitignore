@@ -35,3 +35,9 @@ chroma_db/
 # OS
 .DS_Store
 Thumbs.db
+
+# RAG / vector database
+data/chroma/
+
+# Local knowledge-base files
+knowledge_base/

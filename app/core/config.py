@@ -17,6 +17,15 @@ class Settings(BaseSettings):
     groq_api_key: str
     llm_model: str = "openai/gpt-oss-20b"
 
+    knowledge_base_dir: str = "knowledge_base"
+    chroma_persist_dir: str = "data/chroma"
+    chroma_collection: str = "sawai_knowledge"
+
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+
+    chunk_size: int = 900
+    chunk_overlap: int = 150
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
