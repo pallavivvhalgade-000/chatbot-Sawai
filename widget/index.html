@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Sawai Associates Chatbot Test</title>
+
+    <link
+        rel="stylesheet"
+        href="styles.css"
+    >
+</head>
+
+<body>
+
+    <!--
+        Demo page content.
+        This is only here so we can test the floating widget.
+    -->
+
+    <main class="demo-page">
+        <section class="demo-content">
+            <p class="demo-label">
+                Sawai Associates
+            </p>
+
+            <h1>
+                Website Chatbot Test Page
+            </h1>
+
+            <p>
+                Use the floating chat button in the bottom-right
+                corner to test the AI assistant.
+            </p>
+        </section>
+    </main>
+
+
+    <!-- ==========================================
+         Chat button
+    =========================================== -->
+
+    <button
+        id="sawai-chat-launcher"
+        class="chat-launcher"
+        type="button"
+        aria-label="Open Sawai Associates assistant"
+        aria-expanded="false"
+    >
+        <span
+            class="chat-launcher-icon"
+            aria-hidden="true"
+        >
+            💬
+        </span>
+
+        <span class="chat-launcher-text">
+            Chat with us
+        </span>
+    </button>
+
+
+    <!-- ==========================================
+         Chat window
+    =========================================== -->
+
+    <section
+        id="sawai-chat-window"
+        class="chat-window"
+        aria-label="Sawai Associates AI Assistant"
+        aria-hidden="true"
+    >
+
+        <!-- Header -->
+
+        <header class="chat-header">
+
+            <div class="chat-brand">
+
+                <div
+                    class="chat-avatar"
+                    aria-hidden="true"
+                >
+                    SA
+                </div>
+
+                <div>
+                    <div class="chat-brand-name">
+                        Sawai Associates
+                    </div>
+
+                    <div class="chat-brand-subtitle">
+                        AI Assistant
+                    </div>
+                </div>
+
+            </div>
+
+
+            <div class="chat-header-actions">
+
+                <button
+                    id="sawai-chat-reset"
+                    class="header-button"
+                    type="button"
+                    title="Start a new conversation"
+                    aria-label="Start a new conversation"
+                >
+                    ↻
+                </button>
+
+                <button
+                    id="sawai-chat-close"
+                    class="header-button"
+                    type="button"
+                    title="Close chat"
+                    aria-label="Close chat"
+                >
+                    ×
+                </button>
+
+            </div>
+
+        </header>
+
+
+        <!-- ==========================================
+             Qualification progress
+        =========================================== -->
+
+        <div
+            id="sawai-chat-progress"
+            class="chat-progress hidden"
+            aria-live="polite"
+        >
+        </div>
+
+
+        <!-- ==========================================
+             Messages
+        =========================================== -->
+
+        <div
+            id="sawai-chat-messages"
+            class="chat-messages"
+            role="log"
+            aria-live="polite"
+            aria-relevant="additions"
+        >
+        </div>
+
+
+        <!-- ==========================================
+             Final requirement summary
+        =========================================== -->
+
+        <div
+            id="sawai-chat-summary"
+            class="chat-summary hidden"
+        >
+        </div>
+
+
+        <!-- ==========================================
+             Deterministic navigation/actions
+
+             Examples:
+             Back
+             Main Menu
+             Edit Details
+             Request a Call
+             WhatsApp
+        =========================================== -->
+
+        <div
+            id="sawai-chat-actions"
+            class="chat-actions"
+            aria-label="Conversation actions"
+        >
+        </div>
+
+
+        <!-- ==========================================
+             Dynamic menu/options
+
+             Examples:
+             Real Estate
+             Insurance
+             IT Services
+             Talk to an Expert
+        =========================================== -->
+
+        <div
+            id="sawai-chat-options"
+            class="chat-options"
+            aria-label="Chat options"
+        >
+        </div>
+
+
+        <!-- ==========================================
+             Typing indicator
+        =========================================== -->
+
+        <div
+            id="sawai-chat-typing"
+            class="typing-row hidden"
+            aria-live="polite"
+        >
+            <div class="typing-bubble">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+
+            <span class="typing-text">
+                Assistant is responding…
+            </span>
+        </div>
+
+
+        <!-- ==========================================
+             Input
+        =========================================== -->
+
+        <form
+            id="sawai-chat-form"
+            class="chat-input-area"
+        >
+
+            <label
+                for="sawai-chat-input"
+                class="sr-only"
+            >
+                Type your message
+            </label>
+
+            <textarea
+                id="sawai-chat-input"
+                class="chat-input"
+                maxlength="2000"
+                rows="1"
+                placeholder="Type your message..."
+                autocomplete="off"
+                required
+            ></textarea>
+
+            <button
+                id="sawai-chat-send"
+                class="chat-send"
+                type="submit"
+                aria-label="Send message"
+            >
+                ➤
+            </button>
+
+        </form>
+
+
+        <footer class="chat-footer">
+            AI assistant • Important decisions may require human review
+        </footer>
+
+    </section>
+
+
+    <!-- ==========================================
+         API configuration
+    =========================================== -->
+
+    <script>
+        window.SAWAI_CHATBOT_CONFIG = {
+            apiUrl: "http://127.0.0.1:8000/chat"
+        };
+    </script>
+
+    <script src="widget.js"></script>
+
+</body>
+</html>

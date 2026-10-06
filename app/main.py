@@ -1,90 +1,86 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-from app.rag.retrieval import retrieve_documents_with_scores
+from contextlib import asynccontextmanager
 
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
+from app.api.chat import router as chat_router
+from app.api.schemas import HealthResponse
 from app.core.config import settings
-from app.domain.enums import ConversationMode, ServiceType
-from app.domain.flows.questions import get_next_question
-from app.domain.state import ConversationState
-from app.llm.groq_client import get_groq_client
+from app.core.rate_limit import limiter
+from app.db.database import initialize_database
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Initialize application resources when FastAPI starts.
+    """
+
+    initialize_database()
+
+    yield
 
 
 app = FastAPI(
     title=settings.app_name,
-    description="AI customer-support and lead-capture backend for Sawai Associates.",
-    version="0.2.0",
+    description=(
+        "AI customer-support and lead-capture backend "
+        "for Sawai Associates."
+    ),
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 
-@app.get("/health")
-async def health_check() -> dict[str, str]:
-    return {
-        "status": "ok",
-        "environment": settings.app_env,
-    }
+# ---------------------------------------------------------
+# Rate limiting
+# ---------------------------------------------------------
+
+app.state.limiter = limiter
+
+app.add_exception_handler(
+    RateLimitExceeded,
+    _rate_limit_exceeded_handler,
+)
 
 
-@app.get("/health/llm")
-async def llm_health_check() -> dict[str, str]:
-    get_groq_client()
+# ---------------------------------------------------------
+# CORS
+# ---------------------------------------------------------
 
-    return {
-        "status": "ok",
-        "provider": settings.llm_provider,
-        "model": settings.llm_model,
-    }
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origin_list,
+    allow_credentials=False,
+    allow_methods=[
+        "GET",
+        "POST",
+        "OPTIONS",
+    ],
+    allow_headers=[
+        "Content-Type",
+    ],
+)
 
 
-class StateDemoRequest(BaseModel):
-    session_id: str = "demo-session"
-    service: ServiceType = ServiceType.REAL_ESTATE
+# ---------------------------------------------------------
+# Routes
+# ---------------------------------------------------------
+
+app.include_router(
+    chat_router
+)
 
 
-@app.post("/test/state")
-async def test_state(request: StateDemoRequest):
-    state = ConversationState(
-        session_id=request.session_id,
-        mode=ConversationMode.QUALIFICATION,
-        service=request.service,
+@app.get(
+    "/health",
+    response_model=HealthResponse,
+)
+async def health() -> HealthResponse:
+    return HealthResponse(
+        status="ok",
+        environment=settings.app_env,
     )
-
-    next_question = get_next_question(state)
-
-    return {
-        "session_id": state.session_id,
-        "service": state.service,
-        "mode": state.mode,
-        "next_question": (
-            {
-                "field": next_question.field,
-                "question": next_question.question,
-            }
-            if next_question
-            else None
-        ),
-        "state": state.model_dump(mode="json"),
-    }
-
-class RAGTestRequest(BaseModel):
-    query: str
-    k: int = 4
-
-
-@app.post("/test/rag")
-async def test_rag(request: RAGTestRequest):
-    results = retrieve_documents_with_scores(
-        query=request.query,
-        k=request.k,
-    )
-
-    return {
-        "query": request.query,
-        "results": [
-            {
-                "content": document.page_content,
-                "score": score,
-                "metadata": document.metadata,
-            }
-            for document, score in results
-        ],
-    }

@@ -1,4 +1,5 @@
 from typing import Any
+from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
@@ -20,70 +21,97 @@ class ConversationState(BaseModel):
     """
     Complete state of one chatbot conversation.
 
-    LangGraph will eventually use this object as the state contract.
+    This object is passed through LangGraph on every turn.
     """
 
-    # Session
-    session_id: str
+    session_id: str = Field(
+        default_factory=lambda: str(uuid4())
+    )
 
-    # Current conversation mode
     mode: ConversationMode = ConversationMode.MAIN_MENU
 
-    # User's latest message
     last_user_message: str | None = None
 
-    # Intent classification
     intent: MainIntent | None = None
+
     service: ServiceType | None = None
 
-    # Natural-language understanding
     user_goal: str | None = None
 
-    # Service-specific qualification state
-    real_estate: RealEstateRequirement = Field(
-        default_factory=RealEstateRequirement
+    # ---------------------------------------------------------
+    # Service-specific requirements
+    # ---------------------------------------------------------
+
+    real_estate: RealEstateRequirement | None = None
+
+    insurance: InsuranceRequirement | None = None
+
+    it_services: ITRequirement | None = None
+
+    # ---------------------------------------------------------
+    # Navigation / editing
+    # ---------------------------------------------------------
+
+    question_history: list[str] = Field(
+        default_factory=list
     )
 
-    insurance: InsuranceRequirement = Field(
-        default_factory=InsuranceRequirement
-    )
+    pending_action: str | None = None
 
-    it_services: ITRequirement = Field(
-        default_factory=ITRequirement
-    )
+    action_target: str | None = None
 
-    # Contact information
+    editing_field: str | None = None
+
+    # ---------------------------------------------------------
+    # Contact / lead
+    # ---------------------------------------------------------
+
     contact: ContactDetails = Field(
-        default_factory=ContactDetails
+    default_factory=ContactDetails
     )
 
-    # Lead state
     lead: Lead | None = None
 
-    # Qualification progress
+    # ---------------------------------------------------------
+    # Qualification tracking
+    # ---------------------------------------------------------
+
     current_field: str | None = None
-    completed_fields: list[str] = Field(default_factory=list)
 
-    # Navigation
-    history: list[str] = Field(default_factory=list)
-    previous_modes: list[ConversationMode] = Field(default_factory=list)
+    completed_fields: list[str] = Field(
+        default_factory=list
+    )
 
-    # Requirement summary shown to customer
-    requirement_summary: str | None = None
-
-    # Whether the conversation can now create a lead
     qualification_complete: bool = False
 
-    # General chatbot metadata
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    requirement_summary: dict[str, Any] = Field(
+        default_factory=dict
+    )
 
-    def active_requirement(self) -> (
-        RealEstateRequirement
-        | InsuranceRequirement
-        | ITRequirement
-        | None
-    ):
-        """Return the requirement model for the selected service."""
+    # ---------------------------------------------------------
+    # Conversation history
+    # ---------------------------------------------------------
+
+    history: list[dict[str, Any]] = Field(
+        default_factory=list
+    )
+
+    previous_modes: list[ConversationMode] = Field(
+        default_factory=list
+    )
+
+    # ---------------------------------------------------------
+    # Internal metadata
+    # ---------------------------------------------------------
+
+    metadata: dict[str, Any] = Field(
+        default_factory=dict
+    )
+
+    def active_requirement(self) -> Any:
+        """
+        Return the requirement object for the selected service.
+        """
 
         if self.service == ServiceType.REAL_ESTATE:
             return self.real_estate
@@ -96,24 +124,28 @@ class ConversationState(BaseModel):
 
         return None
 
-    def mark_field_complete(self, field_name: str) -> None:
-        """Mark a qualification field as completed."""
+    def mark_field_complete(self, field: str) -> None:
+        """
+        Mark a qualification field as completed.
+        """
 
-        if field_name not in self.completed_fields:
-            self.completed_fields.append(field_name)
+        if field not in self.completed_fields:
+            self.completed_fields.append(field)
 
     def go_to_mode(self, mode: ConversationMode) -> None:
-        """Move to another conversation mode while preserving navigation."""
+        """
+        Change conversation mode while preserving navigation history.
+        """
 
         if self.mode != mode:
             self.previous_modes.append(self.mode)
 
         self.mode = mode
 
-    def back(self) -> ConversationMode:
-        """Return to the previous conversation mode."""
+    def back(self) -> None:
+        """
+        Return to the previous conversation mode.
+        """
 
         if self.previous_modes:
             self.mode = self.previous_modes.pop()
-
-        return self.mode

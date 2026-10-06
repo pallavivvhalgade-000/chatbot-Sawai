@@ -232,46 +232,104 @@ ALL_QUESTIONS = (
     + COMMON_CONTACT_QUESTIONS
 )
 
-def _get_nested_value(state: ConversationState, path: str):
+def _get_nested_value(
+    state: ConversationState,
+    path: str,
+):
     """
-    Read a nested Pydantic model field.
+    Safely retrieve a nested field from ConversationState.
 
     Example:
-        "real_estate.location"
+
+        real_estate.location
+
+    returns:
+
+        state.real_estate.location
     """
 
-    value = state
+    current = state
 
     for part in path.split("."):
-        value = getattr(value, part, None)
-
-        if value is None:
+        if current is None:
             return None
 
-    return value
+        if hasattr(current, part):
+            current = getattr(current, part)
+        else:
+            return None
+
+    return current
+
+
+def _is_field_filled(value) -> bool:
+    """
+    Determine whether a qualification value is meaningfully filled.
+    """
+
+    if value is None:
+        return False
+
+    if isinstance(value, str):
+        return bool(value.strip())
+
+    return True
 
 
 def get_next_question(
     state: ConversationState,
 ) -> QuestionDefinition | None:
     """
-    Find the first applicable unanswered qualification question.
-
-    The ordering is deterministic, but the conditions make the flow dynamic.
+    Return the next required question that applies to the
+    current conversation and has not already been answered.
     """
 
     for question in ALL_QUESTIONS:
-        if not question.condition(state):
+
+        # -----------------------------------------------------
+        # Check whether this question applies
+        # -----------------------------------------------------
+
+        if question.condition is not None:
+            try:
+                if not question.condition(state):
+                    continue
+            except Exception:
+                # A malformed condition should not crash the
+                # entire chatbot conversation.
+                continue
+
+        # -----------------------------------------------------
+        # Check whether field already has a value
+        # -----------------------------------------------------
+
+        value = _get_nested_value(
+            state,
+            question.field,
+        )
+
+        if _is_field_filled(value):
+            state.mark_field_complete(question.field)
             continue
+
+        # -----------------------------------------------------
+        # Check whether it was explicitly completed
+        # -----------------------------------------------------
+
+        if question.field in state.completed_fields:
+            continue
+
+        # -----------------------------------------------------
+        # Optional questions are skipped for now
+        # -----------------------------------------------------
 
         if not question.required:
-            # Optional questions are skipped for now.
-            # They can be requested later if needed.
             continue
 
-        value = _get_nested_value(state, question.field)
+        # -----------------------------------------------------
+        # This is the next required question
+        # -----------------------------------------------------
 
-        if value is None or value == "":
-            return question
+        return question
 
     return None
