@@ -14,7 +14,7 @@ from app.domain.enums import (
 
 class ClassificationResult(BaseModel):
     intent: MainIntent = MainIntent.GENERAL
-    service: ServiceType = ServiceType.GENERAL
+    service: ServiceType | None = None
 
     requirement_type: RequirementType | None = None
     property_type: PropertyType | None = None

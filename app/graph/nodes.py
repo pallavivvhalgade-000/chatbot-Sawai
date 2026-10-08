@@ -1,9 +1,6 @@
 from typing import Any
 
-from app.db.database import (
-    has_successful_notification,
-    record_notification,
-)
+
 from app.db.leads import (
     save_or_update_lead_from_state,
 )
@@ -25,7 +22,6 @@ from app.domain.models import (
 from app.domain.qualification import apply_answer
 from app.domain.state import ConversationState
 from app.llm.answer_extractor import extract_answer
-from app.notifications.service import notify_lead
 from app.rag.answering import answer_knowledge_question
 
 from app.core.config import settings
@@ -62,6 +58,22 @@ from app.llm.qualification_extractor import (
 from app.llm.classifier import (
     ClassificationResult,
     classify_message,
+)
+
+
+from app.db.lead_operations import (
+    enqueue_lead_delivery,
+    get_lead_events,
+    record_lead_event,
+)
+
+from datetime import (
+    datetime,
+    timezone,
+)
+
+from app.db.lead_conversations import (
+    link_lead_to_session,
 )
 
 
@@ -159,16 +171,26 @@ def apply_classification(
         result.service
     )
 
+    # If the classifier did not identify a new service,
+    # preserve the existing conversation service.
+    if new_service is None:
+        effective_service = previous_service
+    else:
+        effective_service = new_service
+
 
     if (
         previous_service
+        and effective_service
         and previous_service
         != ServiceType.GENERAL
-        and new_service
+        and effective_service
         != ServiceType.GENERAL
         and previous_service
-        != new_service
+        != effective_service
     ):
+
+        
         # The previous lead stays in SQLite.
         # This state now begins a new service journey.
 
@@ -187,7 +209,7 @@ def apply_classification(
         state.it_services = None
 
 
-    state.service = result.service
+    state.service = effective_service
     state.user_goal = result.user_goal
 
     # ---------------------------------------------------------
@@ -478,6 +500,60 @@ def qualification_node(
     # ---------------------------------------------------------
 
     question = get_next_planned_question(state)
+
+    # ---------------------------------------------------------
+    # Privacy gate
+    #
+    # Do not collect Name / Mobile / Email until the user
+    # explicitly agrees to be contacted.
+    # ---------------------------------------------------------
+
+    if (
+        settings.require_contact_consent
+        and question is not None
+        and question.field.startswith(
+            "contact."
+        )
+        and state.contact.consent_to_contact
+        is not True
+    ):
+
+        state.qualification_complete = False
+
+        state.current_field = None
+
+        state.metadata.pop(
+            "next_question",
+            None,
+        )
+
+        state.metadata[
+            "response"
+        ] = (
+            "Before I collect your contact details: "
+            "your information will be used only to "
+            "understand your requirement and connect "
+            "you with the appropriate Sawai Associates "
+            "team. Do you agree to be contacted "
+            "regarding this enquiry?"
+        )
+
+        state.metadata[
+            "action_options"
+        ] = [
+            {
+                "label": "I Agree",
+                "action":
+                    "consent_contact",
+            },
+            {
+                "label": "Main Menu",
+                "action":
+                    "main_menu",
+            },
+        ]
+
+        return state
 
     if question is not None:
         state.qualification_complete = False
@@ -792,15 +868,21 @@ def finalize_lead_node(
     state: ConversationState,
 ) -> ConversationState:
     """
-    Persist a completed lead and optionally send
-    the configured business notification.
+    Persist a completed lead, record operational audit events,
+    queue the configured business delivery, and move the
+    customer to the final summary.
     """
+
+    # ---------------------------------------------------------
+    # Qualification must be complete first
+    # ---------------------------------------------------------
 
     if not state.qualification_complete:
         return state
 
+
     # ---------------------------------------------------------
-    # Minimum contact validation
+    # Contact object safety check
     # ---------------------------------------------------------
 
     if state.contact is None:
@@ -810,15 +892,59 @@ def finalize_lead_node(
 
         return state
 
-    # ---------------------------------------------------------
-    # Make sure required contact details are collected
-    # ---------------------------------------------------------
 
     # ---------------------------------------------------------
-    # Required contact information
+    # Privacy / consent safety net
     # ---------------------------------------------------------
 
-    # Name must be collected before a lead can be finalized.
+    if (
+        settings.require_contact_consent
+        and state.contact.consent_to_contact
+        is not True
+    ):
+        state.qualification_complete = False
+
+        state.mode = (
+            ConversationMode.QUALIFICATION
+        )
+
+        state.current_field = None
+
+        state.metadata.pop(
+            "next_question",
+            None,
+        )
+
+        state.metadata[
+            "response"
+        ] = (
+            "Before I collect or submit your contact "
+            "details, I need your permission to use "
+            "them to understand your enquiry and "
+            "connect you with the appropriate "
+            "Sawai Associates team."
+        )
+
+        state.metadata[
+            "action_options"
+        ] = [
+            {
+                "label": "I Agree",
+                "action": "consent_contact",
+            },
+            {
+                "label": "Main Menu",
+                "action": "main_menu",
+            },
+        ]
+
+        return state
+
+
+    # ---------------------------------------------------------
+    # Required contact information — Name
+    # ---------------------------------------------------------
+
     if not state.contact.name:
         state.qualification_complete = False
 
@@ -841,11 +967,13 @@ def finalize_lead_node(
                 "contact.name"
             )
 
-        state.metadata["next_question"] = (
-            "May I have your name?"
-        )
+        state.metadata[
+            "next_question"
+        ] = "May I have your name?"
 
-        state.metadata["response"] = (
+        state.metadata[
+            "response"
+        ] = (
             "Before I save your request, "
             "may I have your name?"
         )
@@ -853,7 +981,10 @@ def finalize_lead_node(
         return state
 
 
-    # At least one contact method is required.
+    # ---------------------------------------------------------
+    # Required contact information — Mobile or Email
+    # ---------------------------------------------------------
+
     if (
         not state.contact.mobile
         and not state.contact.email
@@ -879,86 +1010,194 @@ def finalize_lead_node(
                 "contact.mobile"
             )
 
-        state.metadata["next_question"] = (
+        state.metadata[
+            "next_question"
+        ] = (
             "Please provide your mobile number."
         )
 
-        state.metadata["response"] = (
+        state.metadata[
+            "response"
+        ] = (
             "Thank you. Please provide a mobile number "
             "so the team can contact you."
         )
 
         return state
 
+
     # ---------------------------------------------------------
-    # Create lead once
+    # Create or update the lead
     # ---------------------------------------------------------
 
     lead = save_or_update_lead_from_state(
-    state
+        state
     )
 
     state.lead = lead
 
+
     if not lead.lead_id:
-        state.metadata["lead_error"] = (
+        state.metadata[
+            "lead_error"
+        ] = (
             "Lead ID could not be created."
         )
 
         return state
 
     # ---------------------------------------------------------
-    # Notification
+    # Connect the lead to its original chatbot conversation
     # ---------------------------------------------------------
 
-    notification_result = None
+    link_lead_to_session(
+        lead_id=lead.lead_id,
+        session_id=state.session_id,
+    )
 
-    if not has_successful_notification(
+
+    # ---------------------------------------------------------
+    # Read existing audit events
+    # ---------------------------------------------------------
+
+    existing_events = get_lead_events(
         lead.lead_id
-    ):
-        notification_result = (
-            notify_lead(lead)
+    )
+
+
+    # ---------------------------------------------------------
+    # Record lead creation only once
+    # ---------------------------------------------------------
+
+    lead_created_already_recorded = any(
+        event.get("event_type")
+        == "lead_created"
+        for event in existing_events
+    )
+
+
+    if not lead_created_already_recorded:
+        record_lead_event(
+            lead_id=lead.lead_id,
+            event_type="lead_created",
+            new_value=(
+                lead.status.value
+                if hasattr(
+                    lead.status,
+                    "value",
+                )
+                else str(
+                    lead.status
+                )
+            ),
+            actor="chatbot",
+            notes=(
+                "Lead created from website chatbot."
+            ),
         )
 
-        if (
-            notification_result.channel
-            != "none"
-        ):
-            record_notification(
-                lead_id=lead.lead_id,
-                channel=(
-                    notification_result.channel
-                ),
-                success=(
-                    notification_result.sent
-                ),
-                error_message=(
-                    None
-                    if notification_result.sent
-                    else notification_result.detail
-                ),
-            )
+
+    # ---------------------------------------------------------
+    # Record customer contact consent only once
+    # ---------------------------------------------------------
+
+    consent_already_recorded = any(
+        event.get("event_type")
+        == "contact_consent_granted"
+        for event in existing_events
+    )
+
+
+    if (
+        state.contact.consent_to_contact
+        is True
+        and not consent_already_recorded
+    ):
+        record_lead_event(
+            lead_id=lead.lead_id,
+            event_type=(
+                "contact_consent_granted"
+            ),
+            new_value=(
+                state.contact.consent_at
+                or "granted"
+            ),
+            actor="customer",
+            notes=(
+                "Customer explicitly agreed to "
+                "be contacted regarding the enquiry."
+            ),
+        )
+
+
+    # ---------------------------------------------------------
+    # Queue notification / integration delivery
+    #
+    # This does NOT send the notification immediately.
+    # The Step 18 delivery worker processes the queued job.
+    # ---------------------------------------------------------
+
+    enqueue_lead_delivery(
+        lead_id=lead.lead_id,
+        channel=(
+            settings.notification_channel
+        ),
+        event_type="lead_created",
+    )
+
+
+    # ---------------------------------------------------------
+    # Clean qualification metadata
+    # ---------------------------------------------------------
+
+    state.current_field = None
+    state.editing_field = None
+
+    state.metadata.pop(
+        "next_question",
+        None,
+    )
+
+    state.metadata.pop(
+        "action_options",
+        None,
+    )
+
+    state.metadata.pop(
+        "lead_error",
+        None,
+    )
+
 
     # ---------------------------------------------------------
     # Customer-facing completion state
     # ---------------------------------------------------------
 
-    state.metadata["lead_created"] = True
-    state.metadata["lead_id"] = lead.lead_id
+    state.metadata[
+        "lead_created"
+    ] = True
 
-    if notification_result is not None:
-        state.metadata["notification"] = (
-            notification_result.model_dump()
-        )
+    state.metadata[
+        "lead_id"
+    ] = lead.lead_id
 
-    # Move the conversation into summary mode
-    state.mode = ConversationMode.SUMMARY
 
-    # Customer-facing completion message
-    state.metadata["response"] = (
+    # ---------------------------------------------------------
+    # Move to summary
+    # ---------------------------------------------------------
+
+    state.mode = (
+        ConversationMode.SUMMARY
+    )
+
+
+    state.metadata[
+        "response"
+    ] = (
         "Thank you. Your requirement has been captured. "
         "Please review the details below."
     )
+
 
     return state
 
@@ -1236,6 +1475,65 @@ def navigation_node(
             "Your WhatsApp preference has been "
             "saved with your request."
         )
+
+        return state
+
+    # ---------------------------------------------------------
+    # Explicit consent before collecting contact information
+    # ---------------------------------------------------------
+
+    if action == "consent_contact":
+
+        state.contact.consent_to_contact = True
+
+        state.contact.consent_at = (
+            datetime.now(
+                timezone.utc
+            ).isoformat()
+        )
+
+        state.mode = (
+            ConversationMode.QUALIFICATION
+        )
+
+        state.current_field = None
+
+        state.metadata.pop(
+            "action_options",
+            None,
+        )
+
+
+        question = (
+            get_next_planned_question(
+                state
+            )
+        )
+
+
+        if question is not None:
+
+            state.current_field = (
+                question.field
+            )
+
+            if (
+                not state.question_history
+                or state.question_history[-1]
+                != question.field
+            ):
+                state.question_history.append(
+                    question.field
+                )
+
+            state.metadata[
+                "next_question"
+            ] = question.question
+
+            state.metadata[
+                "response"
+            ] = question.question
+
 
         return state
 

@@ -16,6 +16,7 @@ ChatAction = Literal[
     "edit_field",
     "request_call",
     "whatsapp",
+    "consent_contact",
 ]
 
 

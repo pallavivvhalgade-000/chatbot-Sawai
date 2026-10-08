@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>
+        Sawai Associates Staff Dashboard
+    </title>
+
+    <link
+        rel="stylesheet"
+        href="./admin.css"
+    >
+</head>
+
+<body>
+
+<div
+    id="loginScreen"
+    class="login-screen"
+>
+    <div class="login-card">
+
+        <div class="brand">
+            Sawai Associates
+        </div>
+
+        <h1>
+            Staff Dashboard
+        </h1>
+
+        <p>
+            Enter your staff API token to continue.
+        </p>
+
+        <form id="loginForm">
+
+            <input
+                id="tokenInput"
+                type="password"
+                autocomplete="current-password"
+                placeholder="Admin API token"
+                required
+            >
+
+            <button type="submit">
+                Sign In
+            </button>
+
+        </form>
+
+        <p
+            id="loginError"
+            class="error"
+        ></p>
+
+    </div>
+</div>
+
+
+<div
+    id="dashboard"
+    class="dashboard hidden"
+>
+
+    <header>
+        <div>
+            <div class="brand">
+                Sawai Associates
+            </div>
+
+            <h1>
+                Lead Operations
+            </h1>
+        </div>
+
+        <button
+            id="logoutButton"
+            class="secondary"
+        >
+            Sign Out
+        </button>
+    </header>
+
+
+    <nav>
+        <button
+            class="nav-button active"
+            data-page="overview"
+        >
+            Overview
+        </button>
+
+        <button
+            class="nav-button"
+            data-page="leads"
+        >
+            Leads
+        </button>
+
+        <button
+            class="nav-button"
+            data-page="delivery"
+        >
+            Delivery
+        </button>
+
+        <button
+            class="nav-button"
+            data-page="analytics"
+        >
+            Analytics
+        </button>
+    </nav>
+
+
+    <main>
+
+        <section
+            id="overviewPage"
+            class="page"
+        >
+            <h2>Overview</h2>
+
+            <div
+                id="overviewCards"
+                class="stats-grid"
+            ></div>
+        </section>
+
+
+        <section
+            id="leadsPage"
+            class="page hidden"
+        >
+            <div class="section-title">
+                <h2>Leads</h2>
+
+                <button
+                    id="refreshLeads"
+                    class="secondary"
+                >
+                    Refresh
+                </button>
+            </div>
+
+
+            <div class="filters">
+
+                <select id="serviceFilter">
+                    <option value="">
+                        All Services
+                    </option>
+                    <option value="real_estate">
+                        Real Estate
+                    </option>
+                    <option value="insurance">
+                        Insurance
+                    </option>
+                    <option value="it_services">
+                        IT Services
+                    </option>
+                    <option value="general">
+                        General
+                    </option>
+                </select>
+
+
+                <select id="priorityFilter">
+                    <option value="">
+                        All Priorities
+                    </option>
+                    <option value="hot">
+                        Hot
+                    </option>
+                    <option value="warm">
+                        Warm
+                    </option>
+                    <option value="cold">
+                        Cold
+                    </option>
+                </select>
+
+
+                <select id="statusFilter">
+                    <option value="">
+                        All Statuses
+                    </option>
+                    <option value="new">
+                        New
+                    </option>
+                    <option value="contacted">
+                        Contacted
+                    </option>
+                    <option value="qualified">
+                        Qualified
+                    </option>
+                    <option value="in_progress">
+                        In Progress
+                    </option>
+                    <option value="proposal_shared">
+                        Proposal Shared
+                    </option>
+                    <option value="follow_up">
+                        Follow-up
+                    </option>
+                    <option value="converted">
+                        Converted
+                    </option>
+                    <option value="closed">
+                        Closed
+                    </option>
+                    <option value="closed_lost">
+                        Closed/Lost
+                    </option>
+                </select>
+
+
+                <input
+                    id="locationFilter"
+                    placeholder="Location"
+                >
+
+
+                <input
+                    id="assignedFilter"
+                    placeholder="Assigned team/person"
+                >
+
+
+                <input
+                    id="dateFromFilter"
+                    type="date"
+                >
+
+
+                <input
+                    id="dateToFilter"
+                    type="date"
+                >
+
+
+                <button id="applyFilters">
+                    Apply Filters
+                </button>
+
+            </div>
+
+
+            <div class="table-wrapper">
+
+                <table>
+
+                    <thead>
+                    <tr>
+                        <th>Lead</th>
+                        <th>Name</th>
+                        <th>Service</th>
+                        <th>Location</th>
+                        <th>Priority</th>
+                        <th>Status</th>
+                        <th>Assigned To</th>
+                        <th>Created</th>
+                        <th></th>
+                    </tr>
+                    </thead>
+
+                    <tbody id="leadRows"></tbody>
+
+                </table>
+
+            </div>
+        </section>
+
+
+        <section
+            id="deliveryPage"
+            class="page hidden"
+        >
+            <h2>
+                Delivery Operations
+            </h2>
+
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Lead</th>
+                        <th>Channel</th>
+                        <th>Status</th>
+                        <th>Attempts</th>
+                        <th>Last Error</th>
+                    </tr>
+                    </thead>
+
+                    <tbody
+                        id="deliveryRows"
+                    ></tbody>
+                </table>
+            </div>
+        </section>
+
+
+        <section
+            id="analyticsPage"
+            class="page hidden"
+        >
+            <h2>
+                Chatbot Analytics
+            </h2>
+
+            <div
+                id="analyticsCards"
+                class="stats-grid"
+            ></div>
+
+            <div class="panel">
+                <h3>
+                    Conversion Funnel
+                </h3>
+
+                <p>
+                    Website Visitor →
+                    Chatbot Opened →
+                    Service Selected →
+                    Requirement Identified →
+                    Contact Details →
+                    Qualified Lead →
+                    Expert Contacted →
+                    Converted
+                </p>
+            </div>
+        </section>
+
+    </main>
+
+</div>
+
+
+<dialog id="leadDialog">
+
+    <div class="dialog-header">
+
+        <h2>
+            Lead Details
+        </h2>
+
+        <button
+            id="closeDialog"
+            class="secondary"
+        >
+            Close
+        </button>
+
+    </div>
+
+
+    <div id="leadDetail"></div>
+
+
+    <!-- =====================================================
+         Lead Chat History
+         ===================================================== -->
+
+    <section class="lead-chat-section">
+
+        <div class="lead-chat-header">
+
+            <div>
+                <h3>
+                    Chat History
+                </h3>
+
+                <p class="muted">
+                    Conversation between the customer
+                    and Sawai Associates AI Assistant.
+                </p>
+            </div>
+
+            <span
+                id="conversationCount"
+                class="conversation-count"
+            ></span>
+
+        </div>
+
+
+        <div
+            id="conversationHistory"
+            class="conversation-history"
+        >
+            <p class="muted">
+                Select a lead to view its chat history.
+            </p>
+        </div>
+
+    </section>
+
+</dialog>
+
+
+<script src="./admin.js"></script>
+
+</body>
+</html>

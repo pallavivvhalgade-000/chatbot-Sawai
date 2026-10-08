@@ -110,6 +110,67 @@ def run_conversation(
             )
         )
 
+    # ---------------------------------------------------------
+    # Store the assistant reply in conversation history
+    # ---------------------------------------------------------
+
+    assistant_reply = (
+        final_state.metadata.get(
+            "response"
+        )
+        or final_state.metadata.get(
+            "next_question"
+        )
+    )
+
+
+    if (
+        isinstance(
+            assistant_reply,
+            str,
+        )
+        and assistant_reply.strip()
+    ):
+
+        last_history_item = (
+            final_state.history[-1]
+            if final_state.history
+            else None
+        )
+
+
+        already_stored = (
+            isinstance(
+                last_history_item,
+                dict,
+            )
+            and last_history_item.get(
+                "role"
+            )
+            == "assistant"
+            and last_history_item.get(
+                "content"
+            )
+            == assistant_reply.strip()
+        )
+
+
+        if not already_stored:
+
+            final_state.history.append(
+                {
+                    "role": "assistant",
+                    "content": (
+                        assistant_reply.strip()
+                    ),
+                }
+            )
+
+
+    # Prevent unlimited session growth.
+    final_state.history = (
+        final_state.history[-200:]
+    )
 
     save_session(
         final_state

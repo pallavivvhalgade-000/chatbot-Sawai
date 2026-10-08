@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
+*.pyc
 
 # Virtual environment
 .venv/
@@ -41,3 +42,21 @@ data/chroma/
 
 # Local knowledge-base files
 knowledge_base/
+
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/backups/
+
+chroma/
+.env
+.env.*
+!.env.example
+!.env.sample
+.venv/
+venv/
+node_modules/
+__pycache__/
+*.pyc
+.next/
+*.zip

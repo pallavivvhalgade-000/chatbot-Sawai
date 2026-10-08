@@ -1,3 +1,7 @@
+from pathlib import Path
+
+from fastapi.staticfiles import StaticFiles
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -11,6 +15,30 @@ from app.api.schemas import HealthResponse
 from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.db.database import initialize_database
+
+from app.api.admin import (
+    router as admin_router,
+)
+
+from starlette.middleware.trustedhost import (
+    TrustedHostMiddleware,
+)
+
+from app.api.analytics import (
+    router as analytics_router,
+)
+
+from fastapi.staticfiles import (
+    StaticFiles,
+)
+
+from app.api.health import (
+    router as health_router,
+)
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+ADMIN_DIR = BASE_DIR / "admin"
 
 
 @asynccontextmanager
@@ -34,6 +62,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=(
+        settings.allowed_host_list
+    ),
+)
 
 # ---------------------------------------------------------
 # Rate limiting
@@ -74,6 +108,27 @@ app.include_router(
     chat_router
 )
 
+app.include_router(
+    admin_router
+)
+
+app.include_router(
+    analytics_router
+)
+
+app.include_router(
+    health_router
+)
+
+app.mount(
+    "/staff",
+    StaticFiles(
+        directory=str(ADMIN_DIR),
+        html=True,
+    ),
+    name="staff",
+)
+
 
 @app.get(
     "/health",
@@ -84,3 +139,45 @@ async def health() -> HealthResponse:
         status="ok",
         environment=settings.app_env,
     )
+
+
+@app.middleware("http")
+async def security_headers(
+    request,
+    call_next,
+):
+    response = await call_next(
+        request
+    )
+
+    response.headers[
+        "X-Content-Type-Options"
+    ] = "nosniff"
+
+    response.headers[
+        "Referrer-Policy"
+    ] = "no-referrer"
+
+    response.headers[
+        "Permissions-Policy"
+    ] = (
+        "camera=(), "
+        "microphone=(), "
+        "geolocation=()"
+    )
+
+
+    if (
+        request.url.path.startswith(
+            "/chat"
+        )
+        or request.url.path.startswith(
+            "/admin"
+        )
+    ):
+        response.headers[
+            "Cache-Control"
+        ] = "no-store"
+
+
+    return response

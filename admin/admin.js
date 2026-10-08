@@ -1,0 +1,1194 @@
+"use strict";
+
+
+let adminToken = "";
+
+let currentLeadId = null;
+
+
+const loginScreen =
+    document.getElementById(
+        "loginScreen"
+    );
+
+const dashboard =
+    document.getElementById(
+        "dashboard"
+    );
+
+const loginForm =
+    document.getElementById(
+        "loginForm"
+    );
+
+const tokenInput =
+    document.getElementById(
+        "tokenInput"
+    );
+
+const loginError =
+    document.getElementById(
+        "loginError"
+    );
+
+const leadDialog =
+    document.getElementById(
+        "leadDialog"
+    );
+
+
+function escapeHtml(
+    value
+) {
+    return String(
+        value ?? ""
+    ).replace(
+        /[&<>"']/g,
+        (character) => ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            "\"": "&quot;",
+            "'": "&#039;"
+        })[character]
+    );
+}
+
+
+function label(
+    value
+) {
+    return String(
+        value ?? ""
+    )
+        .replaceAll(
+            "_",
+            " "
+        )
+        .replace(
+            /\b\w/g,
+            (character) =>
+                character.toUpperCase()
+        );
+}
+
+
+async function api(
+    path,
+    options = {}
+) {
+
+    const headers = {
+        ...(options.headers || {}),
+        Authorization:
+            `Bearer ${adminToken}`
+    };
+
+
+    if (
+        options.body
+        && !headers[
+            "Content-Type"
+        ]
+    ) {
+        headers[
+            "Content-Type"
+        ] = "application/json";
+    }
+
+
+    const response =
+        await fetch(
+            path,
+            {
+                ...options,
+                headers
+            }
+        );
+
+
+    if (
+        response.status
+        === 401
+    ) {
+        throw new Error(
+            "Invalid admin token."
+        );
+    }
+
+
+    if (!response.ok) {
+
+        let detail =
+            "Request failed.";
+
+        try {
+            const body =
+                await response.json();
+
+            detail =
+                body.detail
+                || detail;
+
+        } catch {
+            // Keep generic error.
+        }
+
+        throw new Error(
+            detail
+        );
+    }
+
+
+    if (
+        response.status
+        === 204
+    ) {
+        return null;
+    }
+
+
+    return response.json();
+}
+
+
+function statCard(
+    name,
+    value
+) {
+    return `
+        <div class="stat-card">
+            <div class="label">
+                ${escapeHtml(name)}
+            </div>
+
+            <div class="value">
+                ${escapeHtml(value)}
+            </div>
+        </div>
+    `;
+}
+
+
+async function loadOverview() {
+
+    const data =
+        await api(
+            "/admin/overview"
+        );
+
+
+    document.getElementById(
+        "overviewCards"
+    ).innerHTML = [
+
+        statCard(
+            "Total Leads",
+            data.total_leads
+        ),
+
+        statCard(
+            "Today's Leads",
+            data.today_leads
+        ),
+
+        statCard(
+            "Real Estate",
+            data.real_estate_leads
+        ),
+
+        statCard(
+            "Insurance",
+            data.insurance_leads
+        ),
+
+        statCard(
+            "IT Services",
+            data.it_leads
+        ),
+
+        statCard(
+            "Hot Leads",
+            data.hot_leads
+        ),
+
+        statCard(
+            "Pending",
+            data.pending_leads
+        ),
+
+        statCard(
+            "Follow-up",
+            data.follow_up_leads
+        ),
+
+        statCard(
+            "Converted",
+            data.converted_leads
+        ),
+
+        statCard(
+            "Failed Deliveries",
+            data.failed_deliveries
+        ),
+
+        statCard(
+            "Unassigned",
+            data.unassigned_leads
+        ),
+
+    ].join("");
+}
+
+
+function buildLeadQuery() {
+
+    const params =
+        new URLSearchParams();
+
+
+    const fields = {
+        service:
+            document.getElementById(
+                "serviceFilter"
+            ).value,
+
+        priority:
+            document.getElementById(
+                "priorityFilter"
+            ).value,
+
+        status:
+            document.getElementById(
+                "statusFilter"
+            ).value,
+
+        location:
+            document.getElementById(
+                "locationFilter"
+            ).value.trim(),
+
+        assigned_to:
+            document.getElementById(
+                "assignedFilter"
+            ).value.trim(),
+
+        date_from:
+            document.getElementById(
+                "dateFromFilter"
+            ).value,
+
+        date_to:
+            document.getElementById(
+                "dateToFilter"
+            ).value
+    };
+
+
+    for (
+        const [key, value]
+        of Object.entries(
+            fields
+        )
+    ) {
+        if (value) {
+            params.set(
+                key,
+                value
+            );
+        }
+    }
+
+
+    params.set(
+        "limit",
+        "100"
+    );
+
+
+    return params.toString();
+}
+
+
+async function loadLeads() {
+
+    const query =
+        buildLeadQuery();
+
+
+    const leads =
+        await api(
+            `/admin/leads?${query}`
+        );
+
+
+    const rows =
+        document.getElementById(
+            "leadRows"
+        );
+
+
+    if (!leads.length) {
+        rows.innerHTML = `
+            <tr>
+                <td colspan="9">
+                    No leads found.
+                </td>
+            </tr>
+        `;
+
+        return;
+    }
+
+
+    rows.innerHTML =
+        leads.map(
+            (lead) => {
+
+                const priority =
+                    String(
+                        lead.priority
+                        || ""
+                    ).toLowerCase();
+
+
+                return `
+                    <tr>
+                        <td>
+                            ${escapeHtml(
+                                lead.lead_id
+                            )}
+                        </td>
+
+                        <td>
+                            ${escapeHtml(
+                                lead.name
+                            )}
+                        </td>
+
+                        <td>
+                            ${escapeHtml(
+                                label(
+                                    lead.service
+                                )
+                            )}
+                        </td>
+
+                        <td>
+                            ${escapeHtml(
+                                lead.location
+                                || ""
+                            )}
+                        </td>
+
+                        <td>
+                            <span
+                                class="badge ${escapeHtml(priority)}"
+                            >
+                                ${escapeHtml(
+                                    label(
+                                        priority
+                                    )
+                                )}
+                            </span>
+                        </td>
+
+                        <td>
+                            ${escapeHtml(
+                                label(
+                                    lead.status
+                                )
+                            )}
+                        </td>
+
+                        <td>
+                            ${escapeHtml(
+                                lead.assigned_to
+                                || ""
+                            )}
+                        </td>
+
+                        <td>
+                            ${escapeHtml(
+                                lead.created_at
+                                || ""
+                            )}
+                        </td>
+
+                        <td>
+                            <button
+                                data-view-lead="${escapeHtml(
+                                    lead.lead_id
+                                )}"
+                            >
+                                View
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }
+        ).join("");
+
+
+    document.querySelectorAll(
+        "[data-view-lead]"
+    ).forEach(
+        (button) => {
+
+            button.addEventListener(
+                "click",
+                () => {
+                    openLead(
+                        button.dataset
+                            .viewLead
+                    );
+                }
+            );
+
+        }
+    );
+}
+
+
+async function openLead(
+    leadId
+) {
+
+    currentLeadId =
+        leadId;
+
+
+    const lead =
+        await api(
+            `/admin/leads/${encodeURIComponent(
+                leadId
+            )}`
+        );
+
+
+    const events =
+        await api(
+            `/admin/leads/${encodeURIComponent(
+                leadId
+            )}/events`
+        );
+
+
+    const detail =
+        document.getElementById(
+            "leadDetail"
+        );
+
+
+    const fields = [
+        ["Lead ID", lead.lead_id],
+        ["Name", lead.name],
+        ["Mobile", lead.mobile],
+        ["Email", lead.email],
+        ["Service", label(lead.service)],
+        ["Sub-service", label(lead.sub_service)],
+        ["Requirement", lead.requirement],
+        ["Budget", lead.budget],
+        ["Timeline", label(lead.timeline)],
+        ["Location", lead.location],
+        ["Priority", label(lead.priority)],
+        ["Status", label(lead.status)],
+        ["Assigned To", lead.assigned_to],
+        [
+            "Contact Preference",
+            label(
+                lead.contact_preference
+            )
+        ],
+        ["Source", lead.source],
+        ["Created", lead.created_at]
+    ];
+
+
+    detail.innerHTML = `
+        <div class="detail-grid">
+
+            ${fields.map(
+                ([name, value]) => `
+                    <div class="detail-item">
+                        <small>
+                            ${escapeHtml(name)}
+                        </small>
+
+                        <strong>
+                            ${escapeHtml(
+                                value
+                                || "—"
+                            )}
+                        </strong>
+                    </div>
+                `
+            ).join("")}
+
+        </div>
+
+
+        <div class="management">
+
+            <h3>
+                Update Status
+            </h3>
+
+            <div class="management-row">
+
+                <select id="leadStatus">
+
+                    ${[
+                        "new",
+                        "contacted",
+                        "qualified",
+                        "in_progress",
+                        "proposal_shared",
+                        "follow_up",
+                        "converted",
+                        "closed",
+                        "closed_lost"
+                    ].map(
+                        (status) => `
+                            <option
+                                value="${status}"
+                                ${
+                                    status
+                                    === lead.status
+                                        ? "selected"
+                                        : ""
+                                }
+                            >
+                                ${escapeHtml(
+                                    label(status)
+                                )}
+                            </option>
+                        `
+                    ).join("")}
+
+                </select>
+
+                <button id="saveStatus">
+                    Save Status
+                </button>
+
+            </div>
+
+
+            <h3>
+                Assignment
+            </h3>
+
+            <div class="management-row">
+
+                <input
+                    id="leadAssignment"
+                    value="${escapeHtml(
+                        lead.assigned_to
+                        || ""
+                    )}"
+                    placeholder="Team or staff member"
+                >
+
+                <button id="saveAssignment">
+                    Save Assignment
+                </button>
+
+            </div>
+
+
+            <h3>
+                Audit History
+            </h3>
+
+            <div>
+
+                ${
+                    events.length
+                    ? events.map(
+                        (event) => `
+                            <div class="detail-item">
+                                <strong>
+                                    ${escapeHtml(
+                                        label(
+                                            event.event_type
+                                        )
+                                    )}
+                                </strong>
+
+                                <br>
+
+                                <small>
+                                    ${escapeHtml(
+                                        event.created_at
+                                        || ""
+                                    )}
+
+                                    ·
+
+                                    ${escapeHtml(
+                                        event.actor
+                                        || ""
+                                    )}
+                                </small>
+                            </div>
+                        `
+                    ).join("")
+                    : "No audit events."
+                }
+
+            </div>
+
+        </div>
+    `;
+
+
+    document.getElementById(
+        "saveStatus"
+    ).addEventListener(
+        "click",
+        saveStatus
+    );
+
+
+    document.getElementById(
+    "saveAssignment"
+).addEventListener(
+    "click",
+    saveAssignment
+);
+
+
+// Load the stored chatbot conversation
+// for this lead before opening the dialog.
+await loadLeadConversation(
+    leadId
+);
+
+
+if (!leadDialog.open) {
+    leadDialog.showModal();
+}
+
+}
+
+
+async function saveStatus() {
+
+    const status =
+        document.getElementById(
+            "leadStatus"
+        ).value;
+
+
+    await api(
+        `/admin/leads/${encodeURIComponent(
+            currentLeadId
+        )}/status`,
+        {
+            method: "PATCH",
+
+            body: JSON.stringify({
+                status
+            })
+        }
+    );
+
+
+    await openLead(
+        currentLeadId
+    );
+
+    await loadLeads();
+
+    await loadOverview();
+}
+
+
+async function saveAssignment() {
+
+    const assignedTo =
+        document.getElementById(
+            "leadAssignment"
+        ).value.trim();
+
+
+    if (!assignedTo) {
+        alert(
+            "Assignment cannot be empty."
+        );
+
+        return;
+    }
+
+
+    await api(
+        `/admin/leads/${encodeURIComponent(
+            currentLeadId
+        )}/assignment`,
+        {
+            method: "PATCH",
+
+            body: JSON.stringify({
+                assigned_to:
+                    assignedTo
+            })
+        }
+    );
+
+
+    await openLead(
+        currentLeadId
+    );
+
+    await loadLeads();
+
+    await loadOverview();
+}
+
+
+async function loadDelivery() {
+
+    const jobs =
+        await api(
+            "/admin/delivery-jobs?limit=100"
+        );
+
+
+    const rows =
+        document.getElementById(
+            "deliveryRows"
+        );
+
+
+    if (!jobs.length) {
+        rows.innerHTML = `
+            <tr>
+                <td colspan="6">
+                    No delivery jobs.
+                </td>
+            </tr>
+        `;
+
+        return;
+    }
+
+
+    rows.innerHTML =
+        jobs.map(
+            (job) => `
+                <tr>
+                    <td>
+                        ${escapeHtml(job.id)}
+                    </td>
+
+                    <td>
+                        ${escapeHtml(job.lead_id)}
+                    </td>
+
+                    <td>
+                        ${escapeHtml(job.channel)}
+                    </td>
+
+                    <td>
+                        ${escapeHtml(
+                            label(job.status)
+                        )}
+                    </td>
+
+                    <td>
+                        ${escapeHtml(
+                            `${job.attempt_count}/${job.max_attempts}`
+                        )}
+                    </td>
+
+                    <td>
+                        ${escapeHtml(
+                            job.last_error
+                            || ""
+                        )}
+                    </td>
+                </tr>
+            `
+        ).join("");
+}
+
+
+async function loadAnalytics() {
+
+    const data =
+        await api(
+            "/admin/analytics"
+        );
+
+
+    document.getElementById(
+        "analyticsCards"
+    ).innerHTML = [
+
+        statCard(
+            "Chatbot Opens",
+            data.chatbot_opens
+        ),
+
+        statCard(
+            "Conversations Started",
+            data.conversations_started
+        ),
+
+        statCard(
+            "Completed Leads",
+            data.completed_leads
+        ),
+
+        statCard(
+            "Drop-off Rate",
+            `${data.drop_off_rate}%`
+        ),
+
+        statCard(
+            "Expert Requests",
+            data.expert_requests
+        ),
+
+        statCard(
+            "Call Requests",
+            data.call_requests
+        ),
+
+        statCard(
+            "WhatsApp Requests",
+            data.whatsapp_requests
+        ),
+
+        statCard(
+            "Real Estate Enquiries",
+            data.real_estate_enquiries
+        ),
+
+        statCard(
+            "Insurance Enquiries",
+            data.insurance_enquiries
+        ),
+
+        statCard(
+            "IT Enquiries",
+            data.it_enquiries
+        )
+
+    ].join("");
+}
+
+
+async function showPage(
+    page
+) {
+
+    document.querySelectorAll(
+        ".page"
+    ).forEach(
+        (element) => {
+            element.classList.add(
+                "hidden"
+            );
+        }
+    );
+
+
+    document.querySelectorAll(
+        ".nav-button"
+    ).forEach(
+        (element) => {
+            element.classList.toggle(
+                "active",
+                element.dataset.page
+                === page
+            );
+        }
+    );
+
+
+    document.getElementById(
+        `${page}Page`
+    ).classList.remove(
+        "hidden"
+    );
+
+
+    if (page === "overview") {
+        await loadOverview();
+    }
+
+    if (page === "leads") {
+        await loadLeads();
+    }
+
+    if (page === "delivery") {
+        await loadDelivery();
+    }
+
+    if (page === "analytics") {
+        await loadAnalytics();
+    }
+}
+
+async function loadLeadConversation(
+    leadId
+) {
+
+    const container =
+        document.getElementById(
+            "conversationHistory"
+        );
+
+    const count =
+        document.getElementById(
+            "conversationCount"
+        );
+
+
+    if (
+        !container ||
+        !count
+    ) {
+        return;
+    }
+
+
+    container.innerHTML =
+        '<p class="muted">Loading chat history...</p>';
+
+    count.textContent = "";
+
+
+    try {
+
+        const data = await api(
+            "/admin/leads/" +
+            encodeURIComponent(
+                leadId
+            ) +
+            "/conversation"
+        );
+
+
+        const messages =
+            Array.isArray(
+                data?.messages
+            )
+                ? data.messages
+                : [];
+
+
+        count.textContent =
+            messages.length === 1
+                ? "1 message"
+                : (
+                    messages.length
+                    + " messages"
+                );
+
+
+        if (
+            messages.length === 0
+        ) {
+
+            container.innerHTML =
+                `
+                <div class="chat-history-empty">
+                    No stored chat history is available
+                    for this lead.
+                </div>
+                `;
+
+            return;
+        }
+
+
+        container.innerHTML =
+            messages
+                .map(
+                    (message) => {
+
+                        const role =
+                            message.role ===
+                            "user"
+                                ? "user"
+                                : "assistant";
+
+
+                        const roleLabel =
+                            role === "user"
+                                ? "Customer"
+                                : "AI Assistant";
+
+
+                        return `
+                            <div
+                                class="chat-history-message ${role}"
+                            >
+                                <span
+                                    class="chat-history-role"
+                                >
+                                    ${roleLabel}
+                                </span>
+
+                                <div
+                                    class="chat-history-content"
+                                >
+                                    ${
+                                        escapeHtml(
+                                            message.content
+                                            || ""
+                                        )
+                                    }
+                                </div>
+                            </div>
+                        `;
+                    }
+                )
+                .join("");
+
+
+        container.scrollTop =
+            container.scrollHeight;
+
+    } catch (error) {
+
+        console.error(
+            "Could not load lead conversation:",
+            error
+        );
+
+
+        count.textContent = "";
+
+
+        container.innerHTML =
+            `
+            <div class="chat-history-empty">
+                Chat history could not be loaded.
+            </div>
+        `;
+    }
+}
+
+
+loginForm.addEventListener(
+    "submit",
+    async (
+        event
+    ) => {
+
+        event.preventDefault();
+
+        loginError.textContent =
+            "";
+
+        adminToken =
+            tokenInput.value.trim();
+
+
+        if (!adminToken) {
+            return;
+        }
+
+
+        try {
+
+            await loadOverview();
+
+            loginScreen.classList.add(
+                "hidden"
+            );
+
+            dashboard.classList.remove(
+                "hidden"
+            );
+
+            tokenInput.value = "";
+
+        } catch (
+            error
+        ) {
+
+            adminToken = "";
+
+            loginError.textContent =
+                error.message;
+        }
+    }
+);
+
+
+document.getElementById(
+    "logoutButton"
+).addEventListener(
+    "click",
+    () => {
+
+        adminToken = "";
+
+        dashboard.classList.add(
+            "hidden"
+        );
+
+        loginScreen.classList.remove(
+            "hidden"
+        );
+    }
+);
+
+
+document.querySelectorAll(
+    ".nav-button"
+).forEach(
+    (button) => {
+
+        button.addEventListener(
+            "click",
+            async () => {
+
+                try {
+                    await showPage(
+                        button.dataset.page
+                    );
+
+                } catch (
+                    error
+                ) {
+                    alert(
+                        error.message
+                    );
+                }
+            }
+        );
+
+    }
+);
+
+
+document.getElementById(
+    "applyFilters"
+).addEventListener(
+    "click",
+    loadLeads
+);
+
+
+document.getElementById(
+    "refreshLeads"
+).addEventListener(
+    "click",
+    loadLeads
+);
+
+
+document.getElementById(
+    "closeDialog"
+).addEventListener(
+    "click",
+    () => {
+        leadDialog.close();
+    }
+);

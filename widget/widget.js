@@ -12,6 +12,12 @@
         config.apiUrl ||
         "http://127.0.0.1:8000/chat";
 
+    const ANALYTICS_URL =
+        API_URL.replace(
+            /\/chat\/?$/,
+            "/analytics/event"
+        );
+
     const SESSION_STORAGE_KEY =
         "sawai_chat_session_id";
 
@@ -115,6 +121,10 @@
         launcher.setAttribute(
             "aria-expanded",
             "true"
+        );
+
+        trackAnalytics(
+            "chatbot_open"
         );
 
         if (!hasShownWelcome) {
@@ -223,15 +233,53 @@
         }
 
         items.forEach((item) => {
-            if (
-                typeof item !== "string" ||
-                !item.trim()
+
+            let label = "";
+            let action = null;
+            let target = null;
+            let value = null;
+
+            if (typeof item === "string") {
+
+                label = item.trim();
+                value = label;
+
+            } else if (
+                item &&
+                typeof item === "object"
             ) {
+
+                label = String(
+                    item.label
+                    || item.title
+                    || item.value
+                    || ""
+                ).trim();
+
+                action =
+                    typeof item.action === "string"
+                        ? item.action
+                        : null;
+
+                target =
+                    typeof item.target === "string"
+                        ? item.target
+                        : null;
+
+                value =
+                    typeof item.value === "string"
+                        ? item.value
+                        : label;
+            }
+
+            if (!label) {
                 return;
             }
 
             const button =
-                document.createElement("button");
+                document.createElement(
+                    "button"
+                );
 
             button.type = "button";
 
@@ -239,16 +287,32 @@
                 "chat-option";
 
             button.textContent =
-                item;
+                label;
 
             button.addEventListener(
                 "click",
                 () => {
-                    sendMessage(item);
+
+                    if (action) {
+
+                        sendAction(
+                            action,
+                            target,
+                            label
+                        );
+
+                    } else {
+
+                        sendMessage(
+                            value
+                        );
+                    }
                 }
             );
 
-            options.appendChild(button);
+            options.appendChild(
+                button
+            );
         });
     }
 
@@ -399,38 +463,27 @@
             button.addEventListener(
                 "click",
                 () => {
-                    /*
-                        Open approved external links directly
-                        from the user's click so popup blockers
-                        do not block them.
-                    */
 
                     if (
-                        item.url &&
-                        isSafeExternalUrl(
-                            item.url
-                        )
+                        String(item)
+                            .trim()
+                            .toLowerCase()
+                        === "talk to an expert"
                     ) {
-                        window.open(
-                            item.url,
-                            "_blank",
-                            "noopener,noreferrer"
+                        trackAnalytics(
+                            "expert_request"
                         );
                     }
 
-                    sendAction(
-                        item.action,
-                        item.target || null,
-                        item.label
-                    );
+                    sendMessage(item);
                 }
             );
 
-            actions.appendChild(
-                button
-            );
-        });
-    }
+                        actions.appendChild(
+                            button
+                        );
+                    });
+                }
 
 
     // =========================================================
@@ -527,8 +580,44 @@
     // =========================================================
 
     async function sendMessage(message) {
+
+        /*
+            Safety guard:
+            Never convert action objects into
+            "[object Object]".
+        */
+        if (
+            message &&
+            typeof message === "object"
+        ) {
+
+            if (
+                typeof message.action ===
+                "string"
+            ) {
+
+                return sendAction(
+                    message.action,
+                    message.target || null,
+                    message.label
+                    || message.title
+                    || message.value
+                    || message.action
+                );
+            }
+
+            message =
+                message.value
+                || message.label
+                || message.title
+                || "";
+        }
+
+
         const cleanMessage =
-            String(message || "").trim();
+            String(
+                message ?? ""
+            ).trim();
 
         if (!cleanMessage) {
             return;
@@ -668,6 +757,23 @@
             return;
         }
 
+        if (
+            action === "request_call"
+        ) {
+            trackAnalytics(
+                "call_request"
+            );
+        }
+
+
+        if (
+            action === "whatsapp"
+        ) {
+            trackAnalytics(
+                "whatsapp_request"
+            );
+        }
+
         clearOptions();
 
         renderActions([]);
@@ -765,6 +871,53 @@
             setLoading(false);
 
             input.focus();
+        }
+    }
+
+    async function trackAnalytics(
+        eventType
+    ) {
+        const payload = {
+            event_type: eventType
+        };
+
+
+        if (sessionId) {
+            payload.session_id =
+                sessionId;
+        }
+
+
+        try {
+            await fetch(
+                ANALYTICS_URL,
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body:
+                        JSON.stringify(
+                            payload
+                        )
+                }
+            );
+
+        } catch (
+            error
+        ) {
+            /*
+                Analytics must never break the
+                customer chatbot.
+            */
+
+            console.debug(
+                "Analytics event skipped:",
+                error
+            );
         }
     }
 

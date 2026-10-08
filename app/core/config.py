@@ -93,6 +93,32 @@ class Settings(BaseSettings):
         ]
 
     # ---------------------------------------------------------
+    # Privacy / staff API security
+    # ---------------------------------------------------------
+
+    require_contact_consent: bool = True
+
+    admin_api_enabled: bool = False
+    admin_api_token: str | None = None
+
+    allowed_hosts: str = (
+        "127.0.0.1,"
+        "localhost,"
+        "sawaiassociates.com,"
+        "www.sawaiassociates.com"
+    )
+
+
+    @property
+    def allowed_host_list(self) -> list[str]:
+        return [
+            host.strip()
+            for host in self.allowed_hosts.split(",")
+            if host.strip()
+        ]
+
+
+    # ---------------------------------------------------------
     # Pydantic configuration
     # ---------------------------------------------------------
 

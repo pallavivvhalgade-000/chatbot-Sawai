@@ -26,6 +26,9 @@ class ContactDetails(BaseModel):
     mobile: str | None = None
     email: str | None = None
     contact_preference: ContactPreference | None = None
+    
+    consent_to_contact: bool | None = None
+    consent_at: str | None = None
 
 
 class RealEstateRequirement(BaseModel):

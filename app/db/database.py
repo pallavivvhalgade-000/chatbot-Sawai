@@ -109,6 +109,167 @@ def initialize_database() -> None:
             """
         )
 
+        # =========================================================
+        # Lead audit trail
+        # =========================================================
+
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS lead_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                lead_id TEXT NOT NULL,
+
+                event_type TEXT NOT NULL,
+
+                old_value TEXT,
+                new_value TEXT,
+
+                actor TEXT NOT NULL,
+
+                notes TEXT,
+
+                created_at TEXT NOT NULL,
+
+                FOREIGN KEY (lead_id)
+                    REFERENCES leads (lead_id)
+            )
+            """
+        )
+
+
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS
+            idx_lead_events_lead_id
+            ON lead_events (lead_id)
+            """
+        )
+
+
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS
+            idx_lead_events_created_at
+            ON lead_events (created_at)
+            """
+        )
+
+
+        # =========================================================
+        # Reliable notification / integration delivery queue
+        # =========================================================
+
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS lead_delivery_jobs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                lead_id TEXT NOT NULL,
+
+                channel TEXT NOT NULL,
+
+                event_type TEXT NOT NULL,
+
+                status TEXT NOT NULL,
+
+                attempt_count INTEGER NOT NULL DEFAULT 0,
+                max_attempts INTEGER NOT NULL DEFAULT 3,
+
+                next_attempt_at TEXT,
+
+                last_error TEXT,
+
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+
+                UNIQUE (
+                    lead_id,
+                    channel,
+                    event_type
+                ),
+
+                FOREIGN KEY (lead_id)
+                    REFERENCES leads (lead_id)
+            )
+            """
+        )
+
+
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS
+            idx_delivery_jobs_status
+            ON lead_delivery_jobs (
+                status,
+                next_attempt_at
+            )
+            """
+        )
+
+        # =========================================================
+        # Chatbot analytics events
+        # =========================================================
+
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS analytics_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                event_type TEXT NOT NULL,
+
+                session_id TEXT,
+                service TEXT,
+
+                metadata_json TEXT,
+
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS
+            idx_analytics_events_type
+            ON analytics_events (
+                event_type
+            )
+            """
+        )
+
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS
+            idx_analytics_events_created_at
+            ON analytics_events (
+                created_at
+            )
+            """
+        )
+
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS lead_conversations (
+                lead_id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS
+            idx_lead_conversations_session_id
+            ON lead_conversations (
+                session_id
+            )
+            """
+        )
+
+
         # Commit both table-creation operations
         connection.commit()
 

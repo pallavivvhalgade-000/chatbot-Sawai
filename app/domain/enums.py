@@ -113,9 +113,19 @@ class LeadStatus(str, Enum):
     NEW = "new"
     CONTACTED = "contacted"
     QUALIFIED = "qualified"
+
+    # Keep this for compatibility with existing development data.
     IN_PROGRESS = "in_progress"
+
+    PROPOSAL_SHARED = "proposal_shared"
+    FOLLOW_UP = "follow_up"
+
     CONVERTED = "converted"
+
+    # Keep CLOSED for compatibility.
     CLOSED = "closed"
+
+    CLOSED_LOST = "closed_lost"
 
 
 class TeamType(str, Enum):
